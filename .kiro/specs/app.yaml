@@ -1,0 +1,64 @@
+service:
+  name: "example-service"
+  version: "1.0.0"
+  description: "Example FastAPI service demonstrating SpecSync capabilities"
+
+endpoints:
+  - path: "/health"
+    method: "GET"
+    description: "Health check endpoint that returns service status and current timestamp"
+    response:
+      type: "object"
+      properties:
+        status:
+          type: "string"
+          description: "Service health status"
+          example: "healthy"
+        timestamp:
+          type: "string"
+          description: "Current server timestamp in ISO 8601 format"
+          example: "2025-11-24T10:30:00Z"
+    tests_required: true
+
+  - path: "/users"
+    method: "GET"
+    description: "List all users in the system"
+    response:
+      type: "array"
+      items: "User"
+      description: "Array of user objects"
+    tests_required: true
+
+  - path: "/users/{id}"
+    method: "GET"
+    description: "Get a specific user by their ID"
+    parameters:
+      - name: "id"
+        type: "integer"
+        location: "path"
+        required: true
+        description: "Unique identifier for the user"
+    response:
+      type: "User"
+      description: "User object if found"
+    error_responses:
+      - status: 404
+        description: "User not found"
+    tests_required: true
+
+models:
+  User:
+    description: "User model representing a system user"
+    fields:
+      - name: "id"
+        type: "integer"
+        required: true
+        description: "Unique identifier for the user"
+      - name: "username"
+        type: "string"
+        required: true
+        description: "User's username"
+      - name: "email"
+        type: "string"
+        required: true
+        description: "User's email address"
