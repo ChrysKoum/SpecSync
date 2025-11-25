@@ -42,3 +42,7 @@ async def get_user(id: int):
             return user
     
     raise HTTPException(status_code=404, detail="User not found")
+
+@router.get("/users/{id}/posts")
+async def get_user_posts(id: int):
+    return {"user_id": id, "posts": []}
