@@ -1,6 +1,6 @@
 {
   "auto_remediation": {
-    "enabled": false,
+    "enabled": true,
     "mode": "tasks",
     "description": "Mode options: 'blocking' (block commit on drift), 'tasks' (generate task list), 'semi-auto' (prompt user to ask Kiro for fixes)"
   },

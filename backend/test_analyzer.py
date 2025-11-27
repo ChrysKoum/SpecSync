@@ -478,6 +478,25 @@ class TestCoverageDetector:
         """
         issues = []
         
+        # First check if the code file has any functions or classes to test
+        from backend.drift_detector import CodeParser
+        try:
+            code_parser = CodeParser(code_file)
+            code_parser.parse()
+            
+            # Get functions and classes
+            functions = code_parser.extract_functions()
+            models = code_parser.extract_models()
+            endpoints = code_parser.extract_endpoints()
+            
+            # If file is empty or has no testable content, skip it
+            if not functions and not models and not endpoints:
+                return issues
+            
+        except Exception:
+            # If we can't parse the file, skip it
+            return issues
+        
         # Analyze the code file
         analysis = self.analyzer.analyze_code_file(code_file)
         
