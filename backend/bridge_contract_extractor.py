@@ -6,7 +6,7 @@ import ast
 import yaml
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ContractExtractor:
@@ -27,19 +27,30 @@ class ContractExtractor:
         """
         endpoints = []
         models = {}
+        seen_endpoints = set()  # Track unique endpoints by (method, path)
         
         for pattern in file_patterns:
-            for file_path in self.repo_root.glob(pattern):
+            # Sort files for deterministic ordering
+            files = sorted(self.repo_root.glob(pattern))
+            for file_path in files:
                 if file_path.is_file():
                     file_endpoints, file_models = self._extract_from_file(file_path)
-                    endpoints.extend(file_endpoints)
+                    
+                    # Handle duplicate endpoint detection
+                    for endpoint in file_endpoints:
+                        endpoint_key = (endpoint['method'], endpoint['path'])
+                        if endpoint_key not in seen_endpoints:
+                            endpoints.append(endpoint)
+                            seen_endpoints.add(endpoint_key)
+                        # Silently skip duplicates - first occurrence wins
+                    
                     models.update(file_models)
         
         return {
             'version': '1.0',
             'repo_id': self.repo_root.name,
             'role': 'provider',
-            'last_updated': datetime.utcnow().isoformat() + 'Z',
+            'last_updated': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             'endpoints': endpoints,
             'models': models
         }
@@ -93,7 +104,7 @@ class ContractExtractor:
                             'path': path,
                             'method': method,
                             'status': 'implemented',
-                            'implemented_at': datetime.utcnow().isoformat() + 'Z',
+                            'implemented_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
                             'source_file': str(file_path.relative_to(self.repo_root)),
                             'function_name': node.name,
                             'parameters': parameters,

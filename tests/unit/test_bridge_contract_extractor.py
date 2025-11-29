@@ -376,6 +376,118 @@ class User(BaseModel):
             shutil.rmtree(temp_dir)
 
 
+class TestMultiFileAggregation:
+    """Tests for multi-file aggregation and duplicate detection."""
+    
+    def test_aggregate_endpoints_from_multiple_files(self):
+        """Test that endpoints from multiple files are aggregated."""
+        import tempfile
+        import shutil
+        
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            extractor = ContractExtractor(temp_dir)
+            
+            # Create first file with endpoint
+            file1 = Path(temp_dir) / "api1.py"
+            file1.write_text("""
+@app.get("/users")
+def get_users():
+    pass
+""")
+            
+            # Create second file with different endpoint
+            file2 = Path(temp_dir) / "api2.py"
+            file2.write_text("""
+@app.post("/posts")
+def create_post():
+    pass
+""")
+            
+            contract = extractor.extract_from_files(["*.py"])
+            
+            # Should have both endpoints
+            assert len(contract['endpoints']) == 2
+            
+            paths = [e['path'] for e in contract['endpoints']]
+            assert '/users' in paths
+            assert '/posts' in paths
+        finally:
+            shutil.rmtree(temp_dir)
+    
+    def test_duplicate_endpoint_detection(self):
+        """Test that duplicate endpoints are handled (first occurrence wins)."""
+        import tempfile
+        import shutil
+        
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            extractor = ContractExtractor(temp_dir)
+            
+            # Create first file with endpoint
+            file1 = Path(temp_dir) / "api1.py"
+            file1.write_text("""
+@app.get("/users")
+def get_users_v1():
+    pass
+""")
+            
+            # Create second file with same endpoint (duplicate)
+            file2 = Path(temp_dir) / "api2.py"
+            file2.write_text("""
+@app.get("/users")
+def get_users_v2():
+    pass
+""")
+            
+            contract = extractor.extract_from_files(["*.py"])
+            
+            # Should only have one endpoint (first occurrence)
+            endpoints_with_users = [e for e in contract['endpoints'] if e['path'] == '/users']
+            assert len(endpoints_with_users) == 1
+            
+            # First occurrence should win
+            assert endpoints_with_users[0]['function_name'] == 'get_users_v1'
+        finally:
+            shutil.rmtree(temp_dir)
+    
+    def test_duplicate_detection_different_methods(self):
+        """Test that same path with different methods are not considered duplicates."""
+        import tempfile
+        import shutil
+        
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            extractor = ContractExtractor(temp_dir)
+            
+            # Create file with GET and POST to same path
+            file1 = Path(temp_dir) / "api.py"
+            file1.write_text("""
+@app.get("/users")
+def get_users():
+    pass
+
+@app.post("/users")
+def create_user():
+    pass
+""")
+            
+            contract = extractor.extract_from_files(["*.py"])
+            
+            # Should have both endpoints (different methods)
+            endpoints_with_users = [e for e in contract['endpoints'] if e['path'] == '/users']
+            assert len(endpoints_with_users) == 2
+            
+            methods = [e['method'] for e in endpoints_with_users]
+            assert 'GET' in methods
+            assert 'POST' in methods
+        finally:
+            shutil.rmtree(temp_dir)
+
+
 class TestExtractProviderContract:
     """Tests for extract_provider_contract function."""
     

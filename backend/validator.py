@@ -290,6 +290,7 @@ class ValidationOrchestrator:
                 drift_report = None
                 test_report = None
                 doc_report = None
+                bridge_report = None
                 
                 try:
                     step_start = time.time()
@@ -315,10 +316,18 @@ class ValidationOrchestrator:
                     self.timing_data['documentation'] = time.time() - step_start
                     raise
                 
+                try:
+                    step_start = time.time()
+                    bridge_report = self._run_bridge_validation()
+                    self.timing_data['bridge_validation'] = time.time() - step_start
+                except TimeoutException:
+                    self.timing_data['bridge_validation'] = time.time() - step_start
+                    raise
+                
                 # Aggregate results
                 step_start = time.time()
                 aggregated_result = self._aggregate_validation_results(
-                    drift_report, test_report, doc_report, validation_context
+                    drift_report, test_report, doc_report, bridge_report, validation_context
                 )
                 self.timing_data['aggregation'] = time.time() - step_start
                 
@@ -326,7 +335,7 @@ class ValidationOrchestrator:
                 if not aggregated_result['success']:
                     step_start = time.time()
                     suggestions = self._generate_suggestions(
-                        drift_report, test_report, doc_report
+                        drift_report, test_report, doc_report, bridge_report
                     )
                     self.timing_data['suggestion_generation'] = time.time() - step_start
                     aggregated_result['suggestions'] = suggestions
@@ -337,6 +346,7 @@ class ValidationOrchestrator:
                 aggregated_result['drift_report'] = drift_report
                 aggregated_result['test_report'] = test_report
                 aggregated_result['doc_report'] = doc_report
+                aggregated_result['bridge_report'] = bridge_report
                 
         except TimeoutException as e:
             # Timeout occurred - return partial results
@@ -351,6 +361,7 @@ class ValidationOrchestrator:
                 'drift_report': drift_report if 'drift_report' in locals() else None,
                 'test_report': test_report if 'test_report' in locals() else None,
                 'doc_report': doc_report if 'doc_report' in locals() else None,
+                'bridge_report': bridge_report if 'bridge_report' in locals() else None,
                 'suggestions': None,
                 'timeout_error': str(e)
             }
@@ -451,12 +462,83 @@ class ValidationOrchestrator:
         report = detector.validate_staged_changes(files)
         
         return report.to_dict()
+    
+    def _run_bridge_validation(self) -> Optional[Dict[str, Any]]:
+        """
+        Run bridge validation to check API contract drift.
+        
+        Returns:
+            Bridge validation report or None if bridge not configured
+        """
+        # Check if bridge is configured
+        bridge_config_path = Path('.kiro/settings/bridge.json')
+        if not bridge_config_path.exists():
+            return {
+                'enabled': False,
+                'message': 'Bridge not configured',
+                'has_issues': False,
+                'issues': []
+            }
+        
+        # Import bridge drift detector
+        from backend.bridge_drift_detector import BridgeDriftDetector, generate_drift_report
+        
+        try:
+            # Create detector and check all dependencies
+            detector = BridgeDriftDetector(repo_root=".")
+            drift_results = detector.detect_all_drift()
+            
+            # Aggregate results
+            all_issues = []
+            total_errors = 0
+            total_warnings = 0
+            
+            for dep_name, issues in drift_results.items():
+                for issue in issues:
+                    all_issues.append({
+                        'dependency': dep_name,
+                        'type': issue.type,
+                        'severity': issue.severity,
+                        'endpoint': issue.endpoint,
+                        'method': issue.method,
+                        'location': issue.location,
+                        'message': issue.message,
+                        'suggestion': issue.suggestion
+                    })
+                    
+                    if issue.severity == 'error':
+                        total_errors += 1
+                    elif issue.severity == 'warning':
+                        total_warnings += 1
+            
+            has_issues = len(all_issues) > 0
+            
+            return {
+                'enabled': True,
+                'has_issues': has_issues,
+                'total_issues': len(all_issues),
+                'errors': total_errors,
+                'warnings': total_warnings,
+                'issues': all_issues,
+                'dependencies_checked': list(drift_results.keys()),
+                'message': f"Checked {len(drift_results)} dependencies" if not has_issues else f"Found {len(all_issues)} contract drift issue(s)"
+            }
+            
+        except Exception as e:
+            # If bridge validation fails, don't block the commit
+            return {
+                'enabled': True,
+                'has_issues': False,
+                'error': str(e),
+                'message': f'Bridge validation error: {str(e)}'
+            }
 
     
     def _aggregate_validation_results(self, 
                                      drift_report: Optional[Dict[str, Any]],
                                      test_report: Optional[Dict[str, Any]],
                                      doc_report: Optional[Dict[str, Any]],
+                                     bridge_report: Optional[Dict[str, Any]] = None,
                                      validation_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Aggregate results from all validation steps.
@@ -465,6 +547,7 @@ class ValidationOrchestrator:
             drift_report: Drift detection report
             test_report: Test coverage report
             doc_report: Documentation validation report
+            bridge_report: Bridge contract validation report
             validation_context: Optional validation context with file information
             
         Returns:
@@ -474,8 +557,9 @@ class ValidationOrchestrator:
         has_drift = drift_report and not drift_report.get('aligned', True)
         has_test_issues = test_report and test_report.get('has_issues', False)
         has_doc_issues = doc_report and doc_report.get('has_issues', False)
+        has_bridge_issues = bridge_report and bridge_report.get('has_issues', False)
         
-        success = not (has_drift or has_test_issues or has_doc_issues)
+        success = not (has_drift or has_test_issues or has_doc_issues or has_bridge_issues)
         
         # Count total issues
         total_issues = 0
@@ -492,6 +576,9 @@ class ValidationOrchestrator:
         if doc_report:
             total_issues += len(doc_report.get('issues', []))
             all_issues.extend(doc_report.get('issues', []))
+        if bridge_report:
+            total_issues += bridge_report.get('total_issues', 0)
+            all_issues.extend(bridge_report.get('issues', []))
         
         # Generate message
         if success:
@@ -504,6 +591,8 @@ class ValidationOrchestrator:
                 issue_parts.append(f"{len(test_report.get('issues', []))} test coverage issue(s)")
             if has_doc_issues:
                 issue_parts.append(f"{len(doc_report.get('issues', []))} documentation issue(s)")
+            if has_bridge_issues:
+                issue_parts.append(f"{bridge_report.get('total_issues', 0)} contract drift issue(s)")
             
             message = f"Validation failed: {', '.join(issue_parts)} detected"
         
@@ -514,7 +603,8 @@ class ValidationOrchestrator:
             'total_issues': total_issues,
             'has_drift': has_drift,
             'has_test_issues': has_test_issues,
-            'has_doc_issues': has_doc_issues
+            'has_doc_issues': has_doc_issues,
+            'has_bridge_issues': has_bridge_issues
         }
         
         # Detect rule-drift conflicts if rule engine is available
@@ -535,7 +625,8 @@ class ValidationOrchestrator:
     def _generate_suggestions(self,
                             drift_report: Optional[Dict[str, Any]],
                             test_report: Optional[Dict[str, Any]],
-                            doc_report: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+                            doc_report: Optional[Dict[str, Any]],
+                            bridge_report: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Generate suggestions for fixing validation issues.
         
@@ -543,6 +634,7 @@ class ValidationOrchestrator:
             drift_report: Drift detection report
             test_report: Test coverage report
             doc_report: Documentation validation report
+            bridge_report: Bridge contract validation report
             
         Returns:
             Prioritized suggestions report
@@ -562,11 +654,53 @@ class ValidationOrchestrator:
             doc_report=doc_report
         )
         
+        # Add bridge-specific suggestions if there are bridge issues
+        if bridge_report and bridge_report.get('has_issues', False):
+            bridge_suggestions = self._generate_bridge_suggestions(bridge_report)
+            if 'ordered_suggestions' in suggestions:
+                suggestions['ordered_suggestions'].extend(bridge_suggestions)
+            else:
+                suggestions['ordered_suggestions'] = bridge_suggestions
+            
+            # Update summary
+            if 'summary' in suggestions:
+                suggestions['summary']['total_suggestions'] = len(suggestions['ordered_suggestions'])
+        
         # Apply minimal change policy if rule engine is available
         if self.rule_engine and 'ordered_suggestions' in suggestions:
             suggestions['ordered_suggestions'] = self.rule_engine.apply_minimal_change_policy(
                 suggestions['ordered_suggestions']
             )
+        
+        return suggestions
+    
+    def _generate_bridge_suggestions(self, bridge_report: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Generate suggestions for bridge contract drift issues.
+        
+        Args:
+            bridge_report: Bridge validation report
+            
+        Returns:
+            List of suggestion dictionaries
+        """
+        suggestions = []
+        
+        for issue in bridge_report.get('issues', []):
+            suggestion = {
+                'type': 'bridge',
+                'priority': 2,  # Medium priority
+                'description': f"[{issue['dependency']}] {issue['message']}",
+                'file': issue.get('location', '').split(':')[0] if ':' in issue.get('location', '') else '',
+                'suggestion': issue.get('suggestion', ''),
+                'details': {
+                    'dependency': issue['dependency'],
+                    'endpoint': issue['endpoint'],
+                    'method': issue['method'],
+                    'severity': issue['severity']
+                }
+            }
+            suggestions.append(suggestion)
         
         return suggestions
     
@@ -613,6 +747,7 @@ class ValidationResult:
                  drift_report: Optional[Dict[str, Any]] = None,
                  test_report: Optional[Dict[str, Any]] = None,
                  doc_report: Optional[Dict[str, Any]] = None,
+                 bridge_report: Optional[Dict[str, Any]] = None,
                  suggestions: Optional[Dict[str, Any]] = None,
                  timing: Optional[Dict[str, float]] = None,
                  timed_out: bool = False,
@@ -629,6 +764,7 @@ class ValidationResult:
             drift_report: Optional drift detection report
             test_report: Optional test coverage report
             doc_report: Optional documentation report
+            bridge_report: Optional bridge contract validation report
             suggestions: Optional suggestions for fixing issues
             timing: Optional timing data for performance monitoring
             timed_out: Whether validation exceeded timeout
@@ -642,6 +778,7 @@ class ValidationResult:
         self.drift_report = drift_report
         self.test_report = test_report
         self.doc_report = doc_report
+        self.bridge_report = bridge_report
         self.suggestions = suggestions
         self.timing = timing or {}
         self.timed_out = timed_out
@@ -658,6 +795,7 @@ class ValidationResult:
             'drift_report': self.drift_report,
             'test_report': self.test_report,
             'doc_report': self.doc_report,
+            'bridge_report': self.bridge_report,
             'suggestions': self.suggestions,
             'timing': self.timing,
             'timed_out': self.timed_out,
@@ -729,6 +867,22 @@ class ValidationResult:
             lines.append("--- Documentation Issues ---")
             lines.append(f"Total documentation issues: {len(self.doc_report.get('issues', []))}")
             lines.append("")
+        
+        # Add bridge report summary
+        if self.bridge_report and self.bridge_report.get('enabled', False):
+            if self.bridge_report.get('has_issues', False):
+                lines.append("--- Bridge Contract Drift ---")
+                lines.append(f"Total contract drift issues: {self.bridge_report.get('total_issues', 0)}")
+                deps = self.bridge_report.get('dependencies_checked', [])
+                if deps:
+                    lines.append(f"Dependencies checked: {', '.join(deps)}")
+                lines.append("")
+            else:
+                deps = self.bridge_report.get('dependencies_checked', [])
+                if deps:
+                    lines.append("--- Bridge Contract Status ---")
+                    lines.append(f"✓ All API calls align with contracts ({len(deps)} dependencies)")
+                    lines.append("")
         
         # Add suggestions (only if not timed out)
         if not self.timed_out and self.suggestions and self.suggestions.get('summary', {}).get('total_suggestions', 0) > 0:
