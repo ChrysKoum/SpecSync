@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "specsync-bridge"
+version = "0.1.0"
+description = "Cross-repository API contract synchronization for SpecSync"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "SpecSync Team"}
+]
+keywords = ["api", "contract", "sync", "validation", "drift-detection"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+specsync-bridge = "specsync_bridge.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/specsync/specsync-bridge"
+
+[tool.setuptools.packages.find]
+include = ["specsync_bridge*"]

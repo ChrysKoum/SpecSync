@@ -1,0 +1,15 @@
+{
+  "bridge": {
+    "enabled": true,
+    "role": "provider",
+    "repo_id": "",
+    "provides": {
+      "contract_file": ".kiro/contracts/provided-api.yaml",
+      "extract_from": [
+        "backend/**/*.py"
+      ],
+      "auto_update": true
+    },
+    "dependencies": {}
+  }
+}
