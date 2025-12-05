@@ -1,0 +1,16 @@
+{
+  "bridge": {
+    "enabled": true,
+    "role": "consumer",
+    "repo_id": "",
+    "provides": {},
+    "dependencies": {},
+    "auto_sync": {
+      "enabled": true,
+      "on_startup": true,
+      "interval": "1h",
+      "silent": true,
+      "notify_on_changes": true
+    }
+  }
+}

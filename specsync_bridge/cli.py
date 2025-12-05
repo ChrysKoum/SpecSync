@@ -10,6 +10,7 @@ from specsync_bridge.models import BridgeConfig, Dependency, load_config, load_c
 from specsync_bridge.sync import SyncEngine
 from specsync_bridge.detector import BridgeDriftDetector
 from specsync_bridge.extractor import extract_provider_contract, detect_repo_role
+from specsync_bridge.setup_wizard import setup_wizard
 
 
 class Colors:
@@ -192,6 +193,49 @@ class BridgeCLI:
             print(f"  specsync-bridge init --role {role}")
         
         return result
+    
+    def configure_auto_sync(self, args):
+        print(f"{Colors.BOLD}Configuring auto-sync...{Colors.RESET}\n")
+        
+        if not self.config_path.exists():
+            print(f"{Colors.RED}✗ Bridge not initialized. Run 'specsync-bridge init' first{Colors.RESET}")
+            sys.exit(1)
+        
+        config = load_config(str(self.config_path))
+        
+        # Handle enable/disable
+        if args.enable:
+            config.auto_sync.enabled = True
+        elif args.disable:
+            config.auto_sync.enabled = False
+        
+        # Update settings if provided
+        if args.interval is not None:
+            config.auto_sync.interval = args.interval
+        if args.on_startup is not None:
+            config.auto_sync.on_startup = args.on_startup
+        if args.silent is not None:
+            config.auto_sync.silent = args.silent
+        if args.notify is not None:
+            config.auto_sync.notify_on_changes = args.notify
+        
+        config.save()
+        
+        # Display current configuration
+        status_icon = f"{Colors.GREEN}✓ ENABLED{Colors.RESET}" if config.auto_sync.enabled else f"{Colors.YELLOW}✗ DISABLED{Colors.RESET}"
+        print(f"  Status: {status_icon}")
+        print(f"  Sync on startup: {config.auto_sync.on_startup}")
+        print(f"  Interval: {config.auto_sync.interval or 'none'}")
+        print(f"  Silent mode: {config.auto_sync.silent}")
+        print(f"  Notify on changes: {config.auto_sync.notify_on_changes}")
+        
+        if config.auto_sync.enabled:
+            interval_desc = config.auto_sync.interval if config.auto_sync.interval != "none" else "manual only"
+            print(f"\n{Colors.GREEN}✓ Auto-sync configured{Colors.RESET}")
+            print(f"  Contracts will sync on IDE startup and every {interval_desc}")
+        else:
+            print(f"\n{Colors.YELLOW}Auto-sync is disabled{Colors.RESET}")
+            print(f"  Run 'specsync-bridge auto-sync --enable' to enable")
 
 
 def main():
@@ -228,6 +272,18 @@ def main():
     # detect
     subparsers.add_parser('detect', help='Auto-detect if repo is provider or consumer')
     
+    # setup
+    subparsers.add_parser('setup', help='Interactive setup wizard')
+    
+    # auto-sync
+    auto_sync_p = subparsers.add_parser('auto-sync', help='Configure auto-sync')
+    auto_sync_p.add_argument('--enable', action='store_true', help='Enable auto-sync')
+    auto_sync_p.add_argument('--disable', action='store_true', help='Disable auto-sync')
+    auto_sync_p.add_argument('--interval', choices=['none', '30min', '1h', '2h', '3h', '6h'], help='Sync interval')
+    auto_sync_p.add_argument('--on-startup', type=lambda x: x.lower() == 'true', help='Sync on IDE startup (true/false)')
+    auto_sync_p.add_argument('--silent', type=lambda x: x.lower() == 'true', help='Silent mode (true/false)')
+    auto_sync_p.add_argument('--notify', type=lambda x: x.lower() == 'true', help='Notify on changes (true/false)')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -250,6 +306,10 @@ def main():
         cli.extract()
     elif args.command == 'detect':
         cli.detect()
+    elif args.command == 'setup':
+        setup_wizard()
+    elif args.command == 'auto-sync':
+        cli.configure_auto_sync(args)
 
 
 if __name__ == '__main__':

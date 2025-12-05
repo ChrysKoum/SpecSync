@@ -1,6 +1,6 @@
 {
   "name": "specsync-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP server for SpecSync - Git context and cross-repo Bridge sync tools",
   "main": "dist/server.js",
   "type": "module",

@@ -2,27 +2,34 @@
 
 **Keep your specs, code, tests, and docs in perfect sync**
 
-SpecSync is a commit-driven reliability layer that ensures specifications, code, tests, and documentation remain synchronized throughout the development lifecycle. The system acts as a quality gate at commit-time, preventing drift between these critical artifacts before changes enter the codebase.
+SpecSync is a commit-driven reliability layer that ensures specifications, code, tests, and documentation remain synchronized throughout the development lifecycle. It validates alignment at commit-time, preventing drift before changes enter your codebase.
 
 ## Why SpecSync?
 
-Ever committed code only to realize later that:
-- Your specs are outdated?
-- Tests are missing for new features?
-- Documentation doesn't match the implementation?
+Ever committed code only to realize:
+- Your specs are outdated
+- Tests are missing for new features
+- Documentation doesn't match implementation
+- API contracts between services are out of sync
 
-SpecSync solves this by validating alignment **before** commits are finalized. It's like having a vigilant code reviewer who never sleeps, ensuring your codebase stays consistent and maintainable.
+SpecSync validates alignment **before** commits are finalized, acting as an automated code reviewer that ensures consistency across your entire codebase.
 
-## Features
+## Core Features
 
+### SpecSync Core
 - ✅ **Automatic validation on commit** - No manual checks needed
 - ✅ **Drift detection** - Catches spec-code misalignments instantly
 - ✅ **Test coverage validation** - Ensures new code has tests
-- ✅ **Documentation sync checking** - Keeps docs current with code
+- ✅ **Documentation sync** - Keeps docs current with code
 - ✅ **Actionable suggestions** - Tells you exactly what to fix
 - ✅ **Customizable steering rules** - Adapts to your project conventions
-- ✅ **Fast validation** - Completes in under 30 seconds
-- ✅ **Non-invasive** - Preserves your staged changes
+
+### SpecSync Bridge
+- 🌉 **Cross-repository contract sync** - Keep APIs aligned across services
+- 🔄 **Auto-sync** - Automatic contract updates on IDE startup and intervals
+- 🔍 **Drift detection** - Validates API calls against provider contracts
+- 🚀 **Interactive setup** - Guided wizard for seamless onboarding
+- 📦 **Git-based sync** - No shared infrastructure required
 
 ## Architecture
 
@@ -66,131 +73,94 @@ SpecSync solves this by validating alignment **before** commits are finalized. I
                               ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    Validation Result                         │
-│                                                               │
+│                                                              │
 │  ✓ Aligned → Commit proceeds                                 │
 │  ✗ Drift detected → Block commit + Show suggestions          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Installation
+## Quick Start
 
-### Prerequisites
-
-- **Python 3.8+** with pip
-- **Node.js 16+** with npm
-- **Git** (obviously!)
-- **Kiro IDE** with MCP support
-
-### Step 1: Clone the Repository
+### Install SpecSync Bridge
 
 ```bash
-git clone https://github.com/yourusername/specsync.git
-cd specsync
+pip install specsync-bridge
 ```
 
-### Step 2: Install Python Backend
+### Install MCP Server (for Kiro IDE)
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-# On Windows:
-.venv\Scripts\activate
-# On Unix/MacOS:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+npm install -g specsync-mcp
 ```
 
-### Step 3: Install MCP Tool
+### Configure Kiro MCP
 
-```bash
-cd mcp
-npm install
-npm run build
-cd ..
-```
-
-### Step 4: Configure Kiro MCP Server
-
-Add the SpecSync MCP server to your Kiro configuration:
-
-**Location:** `.kiro/settings/mcp.json` (workspace) or `~/.kiro/settings/mcp.json` (global)
+Add to `.kiro/settings/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "specsync-git": {
-      "command": "node",
-      "args": ["<absolute-path-to-specsync>/mcp/dist/server.js"],
-      "disabled": false,
-      "autoApprove": ["get_staged_diff"]
+    "specsync": {
+      "command": "specsync-mcp",
+      "disabled": false
     }
   }
 }
 ```
 
-Replace `<absolute-path-to-specsync>` with the full path to your SpecSync installation.
-
-### Step 5: Install Pre-Commit Hook
+### Setup Bridge (Interactive)
 
 ```bash
-python install_hook.py
+specsync-bridge setup
 ```
 
-This creates `.git/hooks/pre-commit` that triggers Kiro validation on commits.
+The wizard will guide you through:
+- Auto-detecting your role (provider/consumer)
+- Configuring dependencies
+- Setting up auto-sync
+- Extracting/syncing contracts
 
-### Step 6: Verify Installation
+That's it! You're ready to go.
+
+## Usage Examples
+
+### SpecSync Core - Commit Validation
 
 ```bash
-# Test the MCP tool
-cd mcp
-node test-manual.js
+# Make changes
+git add backend/handlers/user.py
 
-# Test the backend validation
-cd ..
-python demo_validation_flow.py
+# Commit triggers validation
+git commit -m "Add user endpoint"
 
-# Run the test suite
-pytest
+# If drift detected, fix and recommit
+git add .kiro/specs/app.yaml tests/
+git commit -m "Add user endpoint with spec and tests"
 ```
 
-## Operating Modes
+### SpecSync Bridge - Cross-Repo Sync
 
-SpecSync supports three modes for handling drift:
+**Provider (Backend API):**
+```bash
+# Extract your API contract
+specsync-bridge extract
 
-### 1. Blocking Mode (Default)
-- ❌ Blocks commits when drift is detected
-- ✅ Ensures zero drift in history
-- 🎯 Best for: Production code, critical changes
-
-**Configuration:**
-```json
-{
-  "validation": {
-    "block_on_drift": true
-  },
-  "auto_remediation": {
-    "enabled": false
-  }
-}
+# Commit and push
+git add .kiro/contracts/provided-api.yaml
+git push
 ```
 
-### 2. Task Generation Mode
-- ✅ Allows commits to proceed
-- ✅ Generates `remediation-tasks.md` with fix instructions
-- ✅ Execute tasks one-by-one in Kiro
-- 🎯 Best for: Learning, incremental fixes
+**Consumer (Frontend):**
+```bash
+# Sync latest contracts
+specsync-bridge sync
 
-**Configuration:**
-```json
-{
-  "auto_remediation": {
-    "enabled": true,
-    "mode": "tasks"
-  }
+# Validate your API calls
+specsync-bridge validate
+
+# Check status
+specsync-bridge status
+```
 }
 ```
 
@@ -388,145 +358,52 @@ uvicorn main:app --reload
 2. Stage and commit the change
 3. Watch SpecSync catch the missing spec/tests/docs!
 
-## Project Structure
+## Documentation
 
-```
-specsync/
-├── backend/                    # Python FastAPI backend
-│   ├── handlers/               # API endpoint handlers
-│   │   ├── health.py           # Health check endpoint
-│   │   └── user.py             # User endpoints
-│   ├── main.py                 # FastAPI app entry point
-│   ├── models.py               # Pydantic data models
-│   ├── validator.py            # Main validation orchestrator
-│   ├── drift_detector.py       # Spec-code drift detection
-│   ├── test_analyzer.py        # Test coverage validation
-│   ├── doc_analyzer.py         # Documentation sync checking
-│   ├── suggestion_generator.py # Fix suggestion generation
-│   ├── steering_parser.py      # Steering rules parser
-│   └── rule_application.py     # Rule application logic
-├── mcp/                        # Model Context Protocol tool
-│   ├── src/
-│   │   ├── server.ts           # MCP server implementation
-│   │   ├── git.ts              # Git command execution
-│   │   └── types.ts            # TypeScript type definitions
-│   ├── dist/                   # Compiled JavaScript
-│   ├── package.json            # Node.js dependencies
-│   └── tsconfig.json           # TypeScript configuration
-├── docs/                       # Documentation
-│   ├── index.md                # Service overview
-│   ├── architecture.md         # System architecture
-│   └── api/                    # API documentation
-│       ├── health.md           # Health endpoint docs
-│       └── users.md            # User endpoints docs
-├── tests/                      # Test suite
-│   ├── unit/                   # Unit tests
-│   │   ├── test_validator.py
-│   │   ├── test_drift_detector.py
-│   │   ├── test_test_analyzer.py
-│   │   └── test_doc_analyzer.py
-│   ├── property/               # Property-based tests (Hypothesis)
-│   ├── integration/            # Integration tests
-│   │   └── test_validation_flow.py
-│   └── fixtures/               # Test fixtures and data
-├── .kiro/                      # Kiro configuration
-│   ├── specs/                  # Feature specifications
-│   │   ├── app.yaml            # Example service spec
-│   │   └── specsync-core/      # SpecSync system spec
-│   │       ├── requirements.md
-│   │       ├── design.md
-│   │       └── tasks.md
-│   ├── steering/               # Steering rules
-│   │   └── rules.md            # Validation behavior rules
-│   └── hooks/                  # Kiro hooks
-│       └── precommit.json      # Pre-commit hook config
-├── demo_*.py                   # Demo scripts
-├── install_hook.py             # Hook installation script
-├── requirements.txt            # Python dependencies
-├── pytest.ini                  # Pytest configuration
-└── README.md                   # This file
-```
+- **[Bridge CLI Reference](docs/BRIDGE_CLI.md)** - Complete command reference
+- **[Auto-Sync Guide](docs/AUTO_SYNC.md)** - Configure automatic contract syncing
+- **[Architecture](docs/architecture.md)** - System design and components
+- **[Quick Start](docs/BRIDGE_QUICK_START.md)** - Get started quickly
 
 ## Development
 
 ### Running Tests
 
-**All tests:**
 ```bash
+# All tests
 pytest
-```
 
-**Unit tests only:**
-```bash
+# Specific test suites
 pytest tests/unit/
-```
-
-**Integration tests:**
-```bash
 pytest tests/integration/
+pytest tests/property/
+
+# With coverage
+pytest --cov=specsync_bridge --cov-report=html
 ```
 
-**With coverage:**
-```bash
-pytest --cov=backend --cov-report=html
-```
-
-**MCP tool tests:**
-```bash
-cd mcp
-npm test
-```
-
-### Running the Example Service
+### Building Packages
 
 ```bash
-# Activate virtual environment
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+# Python package
+python -m build
 
-# Start the server
-cd backend
-uvicorn main:app --reload
+# NPM package
+cd mcp && npm run build
 ```
 
-Visit http://localhost:8000/docs for interactive API documentation.
+## Contributing
 
-### Code Quality
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Ensure all tests pass
+5. Submit a pull request
 
-**Linting:**
-```bash
-# Python
-flake8 backend/ tests/
+## License
 
-# TypeScript
-cd mcp
-npm run lint
-```
-
-**Type checking:**
-```bash
-# Python
-mypy backend/
-
-# TypeScript
-cd mcp
-npm run type-check
-```
-
-## Troubleshooting
-
-### Issue: MCP Tool Not Found
-
-**Symptom:** Kiro reports "MCP server 'specsync-git' not found"
-
-**Solution:**
-1. Verify MCP tool is built: `cd mcp && npm run build`
-2. Check path in `.kiro/settings/mcp.json` is absolute
-3. Restart Kiro IDE
-4. Check MCP server status in Kiro's MCP panel
-
-### Issue: Pre-Commit Hook Not Triggering
-
-**Symptom:** Commits succeed without validation
+MIT License - see [LICENSE](LICENSE) for details
 
 **Solution:**
 1. Verify hook is installed: `ls -la .git/hooks/pre-commit`

@@ -16,34 +16,54 @@ The Bridge CLI is included with SpecSync. No additional installation required.
 
 ## Quick Start
 
-### For Consumers
+### 🚀 Easiest Way: Interactive Setup
+
+```bash
+specsync-bridge setup
+```
+
+The setup wizard will:
+- Auto-detect if you're a provider or consumer
+- Initialize Bridge configuration
+- Help you add dependencies
+- Configure auto-sync
+- Extract contracts (for providers)
+- Sync contracts (for consumers)
+
+**That's it!** The wizard handles everything.
+
+---
+
+### Manual Setup
+
+#### For Consumers
 
 1. **Initialize Bridge**
    ```bash
-   python bridge.py init --role consumer
+   specsync-bridge init --role consumer
    ```
 
 2. **Add Dependencies**
    ```bash
-   python bridge.py add-dependency backend \
+   specsync-bridge add-dependency backend \
      --git-url https://github.com/org/backend.git
    ```
 
 3. **Sync Contracts**
    ```bash
-   python bridge.py sync
+   specsync-bridge sync
    ```
 
 4. **Validate Your Code**
    ```bash
-   python bridge.py validate
+   specsync-bridge validate
    ```
 
-### For Providers
+#### For Providers
 
 1. **Initialize Bridge**
    ```bash
-   python bridge.py init --role provider
+   specsync-bridge init --role provider
    ```
 
 2. **Extract Your Contract**
@@ -309,6 +329,62 @@ python bridge.py status
 #   ⚠  1 dependencies need syncing
 ```
 
+---
+
+### `auto-sync`
+
+Configure automatic contract synchronization.
+
+**Usage:**
+```bash
+specsync-bridge auto-sync [OPTIONS]
+```
+
+**Options:**
+- `--enable`: Enable auto-sync
+- `--disable`: Disable auto-sync
+- `--interval INTERVAL`: Sync interval (choices: `none`, `30min`, `1h`, `2h`, `3h`, `6h`)
+- `--on-startup BOOL`: Sync on IDE startup (true/false)
+- `--silent BOOL`: Silent mode - no progress indicators (true/false)
+- `--notify BOOL`: Notify when contracts change (true/false)
+
+**What it does:**
+- Configures automatic contract syncing on IDE startup
+- Sets periodic sync intervals
+- Controls notification behavior
+- Enables background syncing
+
+**Example:**
+```bash
+# Enable auto-sync with 1-hour interval
+specsync-bridge auto-sync --enable --interval 1h
+
+# Enable with startup sync only (no interval)
+specsync-bridge auto-sync --enable --interval none --on-startup true
+
+# Configure notifications
+specsync-bridge auto-sync --notify true --silent false
+
+# Disable auto-sync
+specsync-bridge auto-sync --disable
+
+# Output example:
+# Configuring auto-sync...
+#
+#   Status: ✓ ENABLED
+#   Sync on startup: True
+#   Interval: 1h
+#   Silent mode: True
+#   Notify on changes: True
+#
+# ✓ Auto-sync configured
+#   Contracts will sync on IDE startup and every 1h
+```
+
+**See also:** [Auto-Sync Documentation](AUTO_SYNC.md)
+
+---
+
 ## Configuration
 
 Bridge configuration is stored in `.kiro/settings/bridge.json`:
@@ -320,6 +396,13 @@ Bridge configuration is stored in `.kiro/settings/bridge.json`:
     "role": "consumer",
     "repo_id": "",
     "provides": {},
+    "auto_sync": {
+      "enabled": true,
+      "on_startup": true,
+      "interval": "1h",
+      "silent": true,
+      "notify_on_changes": true
+    },
     "dependencies": {
       "backend": {
         "name": "backend",

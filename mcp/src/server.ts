@@ -138,6 +138,41 @@ class SpecSyncServer {
           },
         },
         {
+          name: "bridge_auto_sync",
+          description:
+            "Configure auto-sync settings for Bridge. Enables automatic contract syncing on IDE startup and at intervals.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              enable: {
+                type: "boolean",
+                description: "Enable auto-sync",
+              },
+              disable: {
+                type: "boolean",
+                description: "Disable auto-sync",
+              },
+              interval: {
+                type: "string",
+                enum: ["none", "30min", "1h", "2h", "3h", "6h"],
+                description: "Sync interval (none, 30min, 1h, 2h, 3h, 6h)",
+              },
+              on_startup: {
+                type: "boolean",
+                description: "Sync on IDE startup",
+              },
+              silent: {
+                type: "boolean",
+                description: "Silent mode (no notifications)",
+              },
+              notify: {
+                type: "boolean",
+                description: "Notify on contract changes",
+              },
+            },
+          },
+        },
+        {
           name: "bridge_detect",
           description:
             "Auto-detect if this repository is a provider (has API endpoints), " +
@@ -197,6 +232,21 @@ class SpecSyncServer {
           return this.runBridgeCommand("extract");
         }
 
+        case "bridge_auto_sync": {
+          const args: string[] = [];
+          if (request.params.arguments?.enable) args.push("--enable");
+          if (request.params.arguments?.disable) args.push("--disable");
+          if (request.params.arguments?.interval)
+            args.push("--interval", String(request.params.arguments.interval));
+          if (request.params.arguments?.on_startup !== undefined)
+            args.push("--on-startup", String(request.params.arguments.on_startup));
+          if (request.params.arguments?.silent !== undefined)
+            args.push("--silent", String(request.params.arguments.silent));
+          if (request.params.arguments?.notify !== undefined)
+            args.push("--notify", String(request.params.arguments.notify));
+          return this.runBridgeCommand("auto-sync", args);
+        }
+
         case "bridge_detect": {
           return this.runBridgeCommand("detect");
         }
@@ -207,19 +257,20 @@ class SpecSyncServer {
     });
   }
 
-  private runBridgeCommand(command: string): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+  private runBridgeCommand(command: string, args: string[] = []): { content: Array<{ type: string; text: string }>; isError?: boolean } {
     try {
       // Try specsync-bridge CLI first, fall back to python module
       let output: string;
+      const fullCommand = args.length > 0 ? `${command} ${args.join(" ")}` : command;
       try {
-        output = execSync(`specsync-bridge ${command}`, {
+        output = execSync(`specsync-bridge ${fullCommand}`, {
           encoding: "utf-8",
           timeout: 60000,
           cwd: process.cwd(),
         });
       } catch {
         // Fallback to python module
-        output = execSync(`python -m specsync_bridge.cli ${command}`, {
+        output = execSync(`python -m specsync_bridge.cli ${fullCommand}`, {
           encoding: "utf-8",
           timeout: 60000,
           cwd: process.cwd(),

@@ -115,6 +115,36 @@ class Dependency:
 
 
 @dataclass
+class AutoSyncConfig:
+    """Auto-sync configuration."""
+    enabled: bool = False
+    on_startup: bool = True
+    interval: Optional[str] = "1h"  # none, 30min, 1h, 2h, 3h, 6h
+    silent: bool = True
+    notify_on_changes: bool = True
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AutoSyncConfig':
+        return cls(**data)
+    
+    def get_interval_seconds(self) -> Optional[int]:
+        """Convert interval string to seconds."""
+        if not self.interval or self.interval == "none":
+            return None
+        intervals = {
+            "30min": 1800,
+            "1h": 3600,
+            "2h": 7200,
+            "3h": 10800,
+            "6h": 21600
+        }
+        return intervals.get(self.interval)
+
+
+@dataclass
 class BridgeConfig:
     """Manages bridge configuration."""
     enabled: bool = True
@@ -122,6 +152,7 @@ class BridgeConfig:
     repo_id: str = ""
     provides: Dict[str, Any] = field(default_factory=dict)
     dependencies: Dict[str, Dependency] = field(default_factory=dict)
+    auto_sync: AutoSyncConfig = field(default_factory=AutoSyncConfig)
     config_path: str = ".kiro/settings/bridge.json"
     
     def __post_init__(self):
@@ -130,6 +161,8 @@ class BridgeConfig:
                 name: Dependency.from_dict(dep) if isinstance(dep, dict) else dep
                 for name, dep in self.dependencies.items()
             }
+        if isinstance(self.auto_sync, dict):
+            self.auto_sync = AutoSyncConfig.from_dict(self.auto_sync)
     
     def load(self) -> 'BridgeConfig':
         path = Path(self.config_path)
@@ -147,6 +180,9 @@ class BridgeConfig:
             name: Dependency.from_dict(dep_data)
             for name, dep_data in deps_data.items()
         }
+        auto_sync_data = bridge_data.get('auto_sync', {})
+        if auto_sync_data:
+            self.auto_sync = AutoSyncConfig.from_dict(auto_sync_data)
         return self
     
     def save(self) -> None:
@@ -161,7 +197,8 @@ class BridgeConfig:
                 'dependencies': {
                     name: dep.to_dict()
                     for name, dep in self.dependencies.items()
-                }
+                },
+                'auto_sync': self.auto_sync.to_dict() if isinstance(self.auto_sync, AutoSyncConfig) else self.auto_sync
             }
         }
         with open(path, 'w', encoding='utf-8') as f:
